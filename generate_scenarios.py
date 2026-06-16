@@ -292,6 +292,24 @@ def gen_navmesh_shared_edge_start():
     save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_shared_edge_start.json"), nm, start, goal, expectations)
 
 
+def gen_navmesh_both_on_shared_edge():
+    """起点和终点都在同一条共享边上 — 代价应按两侧区域分摊"""
+    nm = NavMesh()
+    nm.add_polygon([(0, 0), (5, 0), (5, 5), (0, 5)], cost=1.0)
+    nm.add_polygon([(5, 0), (10, 0), (10, 5), (5, 5)], cost=3.0)
+    start = (5.0, 1.0)
+    goal = (5.0, 4.0)
+    expectations = {
+        "reachable": True,
+        "start_valid": True,
+        "goal_valid": True,
+        "min_cost": 5.0,
+        "max_cost": 7.0,
+        "max_nodes_expanded": 10,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_both_on_shared_edge.json"), nm, start, goal, expectations)
+
+
 def gen_navmesh_unreachable():
     """两组不连通的多边形 — 不可达"""
     nm = NavMesh()
@@ -373,6 +391,7 @@ def main():
     gen_navmesh_terrain_costs()
     gen_navmesh_l_corridor()
     gen_navmesh_shared_edge_start()
+    gen_navmesh_both_on_shared_edge()
     gen_navmesh_unreachable()
     gen_navmesh_start_outside()
     gen_navmesh_large()

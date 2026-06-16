@@ -285,6 +285,11 @@ def cmd_report(args):
         return 1
 
     filter_type = args.type
+    verbose_path = args.verbose
+    export_maps_dir = args.export_maps
+
+    if export_maps_dir:
+        os.makedirs(export_maps_dir, exist_ok=True)
 
     all_data = []
     for fname in json_files:
@@ -306,14 +311,29 @@ def cmd_report(args):
 
         if map_type == "grid":
             results = run_grid_benchmark(map_info["map"], start, goal)
-            all_data.append((name, "grid", results, expectations))
+            all_data.append((name, "grid", results, expectations, map_info))
         elif map_type == "navmesh":
             r = run_navmesh_benchmark(map_info["map"], start, goal)
-            all_data.append((name, "navmesh", [r], expectations))
+            all_data.append((name, "navmesh", [r], expectations, map_info))
 
-    reports = generate_report(all_data)
+    report_data = [(n, mt, rs, exp) for n, mt, rs, exp, _ in all_data]
+    reports = generate_report(report_data)
 
-    print(format_report_summary(reports))
+    print(format_report_summary(reports, verbose=verbose_path))
+
+    if export_maps_dir:
+        for name, map_type, results, expectations, map_info in all_data:
+            if map_type == "grid":
+                grid_map = map_info["map"]
+                for r in results:
+                    if r.found and r.path:
+                        safe_h = r.heuristic_name.replace(" ", "_").replace("(", "").replace(")", "")
+                        map_fname = f"{name}_{safe_h}.txt"
+                        map_path = os.path.join(export_maps_dir, map_fname)
+                        with open(map_path, 'w', encoding='utf-8') as f:
+                            f.write(f"场景: {name}  启发: {r.heuristic_name}\n")
+                            f.write(f"代价={r.total_cost:.2f} 展开={r.nodes_expanded}\n\n")
+                            f.write(grid_map.display_path(r.path))
 
     if args.csv:
         export_csv(reports, args.csv)
@@ -324,7 +344,7 @@ def cmd_report(args):
         print(f"Markdown 报告已导出: {args.markdown}")
 
     if args.save_baseline:
-        save_baseline(all_data, args.save_baseline)
+        save_baseline(report_data, args.save_baseline)
         print(f"基线已保存: {args.save_baseline}")
 
     return 0
@@ -519,6 +539,10 @@ def main():
     p_report.add_argument("dir", help="场景 JSON 文件目录")
     p_report.add_argument("--type", "-t", default=None, choices=["grid", "navmesh"],
                           help="只跑某类地图: grid 或 navmesh")
+    p_report.add_argument("--verbose", "-v", action="store_true",
+                          help="显示完整路径坐标")
+    p_report.add_argument("--export-maps", default=None, metavar="DIR",
+                          help="导出网格路径文本图到指定目录")
     p_report.add_argument("--csv", default=None,
                           help="导出 CSV 报告到指定文件")
     p_report.add_argument("--markdown", "--md", default=None,

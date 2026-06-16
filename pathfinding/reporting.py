@@ -187,8 +187,8 @@ def generate_report(
     return reports
 
 
-def format_report_summary(reports: List[ScenarioReport]) -> str:
-    """格式化报告汇总为可读文本。"""
+def format_report_summary(reports: List[ScenarioReport], verbose: bool = False) -> str:
+    """格式化报告汇总为可读文本。verbose=True 显示完整路径坐标。"""
     lines = []
     lines.append("场景验收报告")
     lines.append("=" * 90)
@@ -210,6 +210,7 @@ def format_report_summary(reports: List[ScenarioReport]) -> str:
             r = report.results[0]
             lines.append(f"       代价={r.total_cost:.4f}, 展开={r.nodes_expanded}, "
                          f"耗时={r.time_ms:.3f}ms")
+            lines.append(f"       路径: {r.path_summary(verbose=verbose)}")
         lines.append("")
 
     return '\n'.join(lines)

@@ -228,11 +228,17 @@ def run_stress_test(
 
     grid_results = run_grid_benchmark(grid, start, goal, heuristics=heuristics)
 
+    terrain_str = ""
+    if terrain_ratios:
+        terrain_str = " ".join(f"{k}={v:.0%}" for k, v in sorted(terrain_ratios.items()))
+
     result = {
         "width": width,
         "height": height,
         "obstacle_density": obstacle_density,
         "seed": seed,
+        "terrain_ratios": terrain_ratios if terrain_ratios else {},
+        "terrain_str": terrain_str,
         "grid_results": grid_results,
         "grid_start": start,
         "grid_goal": goal,
@@ -262,6 +268,8 @@ def format_stress_report(result: Dict[str, Any]) -> str:
     lines.append(f"障碍密度: {result['obstacle_density']:.1%}")
     lines.append(f"随机种子: {result['seed']}")
     lines.append(f"NavMesh粒度: merge={result.get('navmesh_merge_size', 1)}")
+    if result.get("terrain_str"):
+        lines.append(f"地形比例: {result['terrain_str']}")
     lines.append(f"起点: {result['grid_start']}  终点: {result['grid_goal']}")
     lines.append("")
 
@@ -306,10 +314,10 @@ def format_multi_stress_report(results: List[Dict[str, Any]]) -> str:
     """格式化多组压力测试汇总报告。"""
     lines = []
     lines.append("多组压力测试汇总")
-    lines.append("=" * 110)
+    lines.append("=" * 130)
 
     header = (
-        f"{'尺寸':<12} {'密度':<6} {'粒度':<4} {'种子':<6} "
+        f"{'尺寸':<12} {'密度':<6} {'地形':<18} {'粒度':<4} {'种子':<6} "
         f"{'Grid展开':>8} {'Grid耗时':>10} {'Grid代价':>8} "
         f"{'NM展开':>8} {'NM耗时':>10} {'NM代价':>8} {'NM多边形':>8} "
         f"{'节点比':>6} {'时间比':>6}"
@@ -326,6 +334,7 @@ def format_multi_stress_report(results: List[Dict[str, Any]]) -> str:
         nm_r = r.get("navmesh_result")
         size_str = f"{r['width']}x{r['height']}"
         density_str = f"{r['obstacle_density']:.0%}"
+        terrain_str = r.get("terrain_str", "")[:18]
         merge_str = str(r.get("navmesh_merge_size", 1))
         seed_str = str(r.get("seed", "—"))
 
@@ -348,7 +357,7 @@ def format_multi_stress_report(results: List[Dict[str, Any]]) -> str:
                 time_ratio = f"{grid_best.time_ms / nm_r.time_ms:.1f}x"
 
         lines.append(
-            f"{size_str:<12} {density_str:<6} {merge_str:<4} {seed_str:<6} "
+            f"{size_str:<12} {density_str:<6} {terrain_str:<18} {merge_str:<4} {seed_str:<6} "
             f"{grid_exp:>8} {grid_time:>10} {grid_cost:>8} "
             f"{nm_exp:>8} {nm_time:>10} {nm_cost:>8} {nm_polys:>8} "
             f"{node_ratio:>6} {time_ratio:>6}"

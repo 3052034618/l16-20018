@@ -242,11 +242,12 @@ class NavMesh:
             return [], [], float('inf'), stats
 
         if start_polys[0] == goal_polys[0] or set(start_polys) & set(goal_polys):
-            same_poly = (set(start_polys) & set(goal_polys)).pop()
-            cost = point_to_point_distance(start, goal) * self.polygons[same_poly].cost
+            shared_polys = sorted(set(start_polys) & set(goal_polys))
+            corridor = shared_polys
+            cost = self.compute_path_cost([start, goal], corridor)
             stats = {"nodes_expanded": 0, "nodes_generated": 0, "max_open_size": 0, "found": True,
                      "start_valid": True, "goal_valid": True}
-            return [start, goal], [same_poly], cost, stats
+            return [start, goal], corridor, cost, stats
 
         best_result = None
         best_cost = float('inf')
