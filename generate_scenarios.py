@@ -28,7 +28,13 @@ def gen_grid_simple():
     grid.set_terrain(4, 5, TerrainType.WALL)
     start = (0, 0)
     goal = (9, 9)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_simple.json"), grid, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 12.0,
+        "max_cost": 16.0,
+        "max_nodes_expanded": 100,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_simple.json"), grid, start, goal, expectations)
 
 
 def gen_grid_obstacle_wall():
@@ -39,7 +45,13 @@ def gen_grid_obstacle_wall():
             grid.set_terrain(7, y, TerrainType.WALL)
     start = (0, 4)
     goal = (14, 6)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_wall_gap.json"), grid, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 13.0,
+        "max_cost": 18.0,
+        "max_nodes_expanded": 200,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_wall_gap.json"), grid, start, goal, expectations)
 
 
 def gen_grid_unreachable():
@@ -49,7 +61,12 @@ def gen_grid_unreachable():
         grid.set_terrain(6, y, TerrainType.WALL)
     start = (0, 5)
     goal = (11, 5)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_unreachable.json"), grid, start, goal)
+    expectations = {
+        "reachable": False,
+        "start_valid": True,
+        "goal_valid": True,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_unreachable.json"), grid, start, goal, expectations)
 
 
 def gen_grid_start_in_wall():
@@ -60,7 +77,12 @@ def gen_grid_start_in_wall():
     grid.set_terrain(3, 2, TerrainType.WALL)
     start = (2, 2)
     goal = (9, 9)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_start_in_wall.json"), grid, start, goal)
+    expectations = {
+        "reachable": False,
+        "start_valid": False,
+        "goal_valid": True,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_start_in_wall.json"), grid, start, goal, expectations)
 
 
 def gen_grid_goal_in_wall():
@@ -72,7 +94,12 @@ def gen_grid_goal_in_wall():
     grid.set_terrain(8, 8, TerrainType.WALL)
     start = (0, 0)
     goal = (7, 7)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_goal_in_wall.json"), grid, start, goal)
+    expectations = {
+        "reachable": False,
+        "start_valid": True,
+        "goal_valid": False,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_goal_in_wall.json"), grid, start, goal, expectations)
 
 
 def gen_grid_multi_terrain():
@@ -97,7 +124,13 @@ def gen_grid_multi_terrain():
 
     start = (0, 0)
     goal = (19, 11)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_multi_terrain.json"), grid, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 20.0,
+        "max_cost": 35.0,
+        "max_nodes_expanded": 300,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_multi_terrain.json"), grid, start, goal, expectations)
 
 
 def gen_grid_maze():
@@ -129,7 +162,13 @@ def gen_grid_maze():
 
     start = (1, 1)
     goal = (19, 13)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_maze.json"), grid, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 25.0,
+        "max_cost": 40.0,
+        "max_nodes_expanded": 500,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_maze.json"), grid, start, goal, expectations)
 
 
 def gen_grid_large():
@@ -165,7 +204,13 @@ def gen_grid_large():
 
     start = (1, 1)
     goal = (98, 98)
-    save_grid_map(os.path.join(SCENARIO_DIR, "grid_large.json"), grid, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 150.0,
+        "max_cost": 200.0,
+        "max_nodes_expanded": 10000,
+    }
+    save_grid_map(os.path.join(SCENARIO_DIR, "grid_large.json"), grid, start, goal, expectations)
 
 
 def gen_navmesh_simple():
@@ -177,7 +222,13 @@ def gen_navmesh_simple():
     nm.add_polygon([(5, 5), (10, 5), (10, 10), (5, 10)], cost=1.0)
     start = (1.0, 1.0)
     goal = (9.0, 9.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_simple.json"), nm, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 10.0,
+        "max_cost": 14.0,
+        "max_nodes_expanded": 10,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_simple.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_terrain_costs():
@@ -194,7 +245,13 @@ def gen_navmesh_terrain_costs():
     nm.add_polygon([(8, 8), (12, 8), (12, 12), (8, 12)], cost=1.0)
     start = (1.0, 1.0)
     goal = (11.0, 11.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_terrain_costs.json"), nm, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 10.0,
+        "max_cost": 30.0,
+        "max_nodes_expanded": 20,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_terrain_costs.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_l_corridor():
@@ -206,7 +263,14 @@ def gen_navmesh_l_corridor():
     nm.add_polygon([(8, 6), (10, 6), (10, 10), (8, 10)], cost=1.0)
     start = (1.0, 1.0)
     goal = (9.0, 9.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_l_corridor.json"), nm, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 10.0,
+        "max_cost": 20.0,
+        "max_nodes_expanded": 10,
+        "min_path_length": 3,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_l_corridor.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_shared_edge_start():
@@ -218,7 +282,14 @@ def gen_navmesh_shared_edge_start():
     nm.add_polygon([(5, 5), (10, 5), (10, 10), (5, 10)], cost=1.0)
     start = (5.0, 2.5)
     goal = (8.0, 8.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_shared_edge_start.json"), nm, start, goal)
+    expectations = {
+        "reachable": True,
+        "start_valid": True,
+        "min_cost": 5.0,
+        "max_cost": 12.0,
+        "max_nodes_expanded": 10,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_shared_edge_start.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_unreachable():
@@ -230,7 +301,12 @@ def gen_navmesh_unreachable():
     nm.add_polygon([(13, 0), (16, 0), (16, 3), (13, 3)], cost=1.0)
     start = (1.0, 1.0)
     goal = (14.0, 1.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_unreachable.json"), nm, start, goal)
+    expectations = {
+        "reachable": False,
+        "start_valid": True,
+        "goal_valid": True,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_unreachable.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_start_outside():
@@ -240,7 +316,12 @@ def gen_navmesh_start_outside():
     nm.add_polygon([(6, 2), (10, 2), (10, 6), (6, 6)], cost=1.0)
     start = (0.0, 0.0)
     goal = (8.0, 4.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_start_outside.json"), nm, start, goal)
+    expectations = {
+        "reachable": False,
+        "start_valid": False,
+        "goal_valid": True,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_start_outside.json"), nm, start, goal, expectations)
 
 
 def gen_navmesh_large():
@@ -264,7 +345,13 @@ def gen_navmesh_large():
 
     start = (1.0, 1.0)
     goal = (49.0, 49.0)
-    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_large.json"), nm, start, goal)
+    expectations = {
+        "reachable": True,
+        "min_cost": 50.0,
+        "max_cost": 150.0,
+        "max_nodes_expanded": 200,
+    }
+    save_navmesh(os.path.join(SCENARIO_DIR, "navmesh_large.json"), nm, start, goal, expectations)
 
 
 def main():

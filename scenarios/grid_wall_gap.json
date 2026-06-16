@@ -22,5 +22,11 @@
   "goal": [
     14,
     6
-  ]
+  ],
+  "expectations": {
+    "reachable": true,
+    "min_cost": 13.0,
+    "max_cost": 18.0,
+    "max_nodes_expanded": 200
+  }
 }

@@ -294,6 +294,11 @@ class NavMesh:
         对于路径上每个线段, 计算其在每个多边形内的长度,
         乘以该多边形的 cost, 累加得到总代价。
 
+        精确处理:
+          - 起点/终点落在共享边上 (属于多个多边形)
+          - 路径拐点恰好落在多边形顶点或边上
+          - 线段与共享边相交的精确位置
+
         Args:
             smooth_path: 平滑后的路径点列表
             corridor: 经过的多边形 ID 序列
@@ -301,10 +306,18 @@ class NavMesh:
         Returns:
             总代价 (几何长度 × 地形代价)
         """
-        if len(smooth_path) < 2:
+        if len(smooth_path) < 2 or len(corridor) == 0:
             return 0.0
 
+        EPS = 1e-9
+
         total_cost = 0.0
+
+        if len(corridor) == 1:
+            poly_id = corridor[0]
+            poly = self.polygons[poly_id]
+            length = point_to_point_distance(smooth_path[0], smooth_path[-1])
+            return length * poly.cost
 
         shared_edges = []
         for i in range(len(corridor) - 1):
@@ -314,54 +327,51 @@ class NavMesh:
             )
             shared_edges.append(edge)
 
-        path_t = [0.0]
         current_poly_idx = 0
-        seg_start_idx = 0
-        seg_start_t = 0.0
 
-        cumulative_len = 0.0
-        seg_lengths = []
-        for i in range(len(smooth_path) - 1):
-            length = point_to_point_distance(smooth_path[i], smooth_path[i + 1])
-            seg_lengths.append(length)
-            cumulative_len += length
-
-        total_length = cumulative_len
-        if total_length < 1e-10:
-            start_poly = corridor[0]
-            return 0.0
-
-        dist_so_far = 0.0
         for seg_i in range(len(smooth_path) - 1):
-            p1 = smooth_path[seg_i]
-            p2 = smooth_path[seg_i + 1]
-            seg_len = seg_lengths[seg_i]
+            seg_start = smooth_path[seg_i]
+            seg_end = smooth_path[seg_i + 1]
+            seg_len = point_to_point_distance(seg_start, seg_end)
+
+            if seg_len < EPS:
+                continue
 
             crossings = []
 
-            for edge_i, edge in enumerate(shared_edges[current_poly_idx:], start=current_poly_idx):
+            for edge_i, edge in enumerate(shared_edges):
+                if edge_i < current_poly_idx:
+                    continue
                 if edge is None:
                     continue
-                result = line_segment_intersection(p1, p2, edge[0], edge[1])
+
+                result = line_segment_intersection(seg_start, seg_end, edge[0], edge[1])
                 if result is not None:
                     t_in_seg, pt = result
-                    if t_in_seg > 1e-10 and t_in_seg < 1 - 1e-10:
-                        crossings.append((t_in_seg, edge_i))
+                    if -EPS <= t_in_seg <= 1.0 + EPS:
+                        t_clamped = max(0.0, min(1.0, t_in_seg))
+                        crossings.append((t_clamped, edge_i, pt))
 
             crossings.sort(key=lambda x: x[0])
 
             prev_t = 0.0
-            for t_in_seg, edge_idx in crossings:
-                seg_dist = (t_in_seg - prev_t) * seg_len
-                total_cost += seg_dist * self.polygons[corridor[current_poly_idx]].cost
-                prev_t = t_in_seg
-                current_poly_idx = max(current_poly_idx, edge_idx + 1)
-                if current_poly_idx >= len(corridor):
-                    current_poly_idx = len(corridor) - 1
+            poly_idx = current_poly_idx
 
-            remaining_dist = (1.0 - prev_t) * seg_len
-            if remaining_dist > 1e-10:
-                total_cost += remaining_dist * self.polygons[corridor[current_poly_idx]].cost
+            for t_cross, edge_i, _ in crossings:
+                if t_cross - prev_t > EPS:
+                    sub_len = (t_cross - prev_t) * seg_len
+                    total_cost += sub_len * self.polygons[corridor[poly_idx]].cost
+
+                prev_t = t_cross
+                new_poly_idx = edge_i + 1
+                if new_poly_idx > poly_idx:
+                    poly_idx = new_poly_idx
+
+            if 1.0 - prev_t > EPS:
+                sub_len = (1.0 - prev_t) * seg_len
+                total_cost += sub_len * self.polygons[corridor[poly_idx]].cost
+
+            current_poly_idx = max(current_poly_idx, min(poly_idx, len(corridor) - 1))
 
         return total_cost
 

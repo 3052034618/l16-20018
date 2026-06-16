@@ -93,5 +93,11 @@
   "goal": [
     9.0,
     9.0
-  ]
+  ],
+  "expectations": {
+    "reachable": true,
+    "min_cost": 10.0,
+    "max_cost": 14.0,
+    "max_nodes_expanded": 10
+  }
 }

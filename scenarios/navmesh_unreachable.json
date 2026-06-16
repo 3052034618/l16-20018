@@ -93,5 +93,10 @@
   "goal": [
     14.0,
     1.0
-  ]
+  ],
+  "expectations": {
+    "reachable": false,
+    "start_valid": true,
+    "goal_valid": true
+  }
 }

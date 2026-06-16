@@ -48,7 +48,7 @@ JSON 地图加载器 — 支持从 JSON 文件加载网格地图和导航网格�
 
 import json
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .grid import GridMap, TerrainType
 from .navmesh import NavMesh
@@ -82,12 +82,14 @@ def load_map(filepath: str) -> Dict[str, Any]:
           - start: start point (tuple)
           - goal: goal point (tuple)
           - name: map name (from filename)
+          - expectations: dict of expected results (optional)
     """
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     map_type = data.get("type", "grid")
     name = os.path.splitext(os.path.basename(filepath))[0]
+    expectations = data.get("expectations", {})
 
     if map_type == "grid":
         grid_map, start, goal = _load_grid_map(data)
@@ -97,6 +99,7 @@ def load_map(filepath: str) -> Dict[str, Any]:
             "start": start,
             "goal": goal,
             "name": name,
+            "expectations": expectations,
         }
     elif map_type == "navmesh":
         navmesh, start, goal = _load_navmesh(data)
@@ -106,6 +109,7 @@ def load_map(filepath: str) -> Dict[str, Any]:
             "start": start,
             "goal": goal,
             "name": name,
+            "expectations": expectations,
         }
     else:
         raise ValueError(f"Unknown map type: {map_type}")
@@ -183,7 +187,8 @@ def _load_navmesh(data: Dict) -> Tuple[NavMesh, Tuple[float, float], Tuple[float
 
 
 def save_grid_map(filepath: str, grid_map: GridMap,
-                  start: Tuple[int, int], goal: Tuple[int, int]):
+                  start: Tuple[int, int], goal: Tuple[int, int],
+                  expectations: Optional[Dict] = None):
     """保存网格地图为 JSON 文件。"""
     terrain_symbols = {v: k for k, v in SYMBOL_TO_TERRAIN.items()}
 
@@ -204,13 +209,16 @@ def save_grid_map(filepath: str, grid_map: GridMap,
         "start": list(start),
         "goal": list(goal),
     }
+    if expectations:
+        data["expectations"] = expectations
 
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def save_navmesh(filepath: str, navmesh: NavMesh,
-                 start: Tuple[float, float], goal: Tuple[float, float]):
+                 start: Tuple[float, float], goal: Tuple[float, float],
+                 expectations: Optional[Dict] = None):
     """保存导航网格为 JSON 文件。"""
     polygons = []
     for pid in sorted(navmesh.polygons.keys()):
@@ -226,6 +234,8 @@ def save_navmesh(filepath: str, navmesh: NavMesh,
         "start": list(start),
         "goal": list(goal),
     }
+    if expectations:
+        data["expectations"] = expectations
 
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

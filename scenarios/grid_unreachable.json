@@ -22,5 +22,10 @@
   "goal": [
     11,
     5
-  ]
+  ],
+  "expectations": {
+    "reachable": false,
+    "start_valid": true,
+    "goal_valid": true
+  }
 }
