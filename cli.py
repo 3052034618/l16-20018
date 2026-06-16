@@ -26,11 +26,19 @@ from pathfinding.reporting import (
     export_csv,
     export_markdown,
 )
+from pathfinding.regression import (
+    save_baseline,
+    load_baseline,
+    compare_with_baseline,
+    format_regression_report,
+    export_regression_markdown,
+)
 from pathfinding.stress_test import (
     run_stress_test,
     format_stress_report,
     run_multiple_stress_tests,
     format_multi_stress_report,
+    build_matrix_configs,
 )
 from pathfinding.heuristics import (
     manhattan_distance,
@@ -123,6 +131,8 @@ def cmd_batch(args):
 
     filter_type = args.type
     only_failures = args.only_failures
+    verbose_path = args.verbose
+    export_maps_dir = args.export_maps
 
     heuristics = None
     if args.heuristics:
@@ -136,6 +146,9 @@ def cmd_batch(args):
         if not heuristics:
             print("错误: 没有有效的启发函数")
             return 1
+
+    if export_maps_dir:
+        os.makedirs(export_maps_dir, exist_ok=True)
 
     all_results = []
     grid_count = 0
@@ -165,31 +178,51 @@ def cmd_batch(args):
 
         if map_type == "grid":
             grid_count += 1
-            results = run_grid_benchmark(map_info["map"], start, goal,
+            grid_map = map_info["map"]
+            results = run_grid_benchmark(grid_map, start, goal,
                                          heuristics=heuristics)
 
             any_failure = any(not r.found for r in results)
             if only_failures and not any_failure:
-                all_results.append((name, "grid", results))
+                all_results.append((name, "grid", results, map_info))
                 continue
 
             shown_count += 1
             print(f"\n  ▶ [Grid] {name}")
             print(format_result_table(results, title=""))
-            all_results.append((name, "grid", results))
+            for r in results:
+                if r.found:
+                    print(f"    {r.heuristic_name}: {r.path_summary(verbose=verbose_path)}")
+
+            if export_maps_dir:
+                for r in results:
+                    if r.found and r.path:
+                        safe_h = r.heuristic_name.replace(" ", "_").replace("(", "").replace(")", "")
+                        map_fname = f"{name}_{safe_h}.txt"
+                        map_path = os.path.join(export_maps_dir, map_fname)
+                        with open(map_path, 'w', encoding='utf-8') as f:
+                            f.write(f"场景: {name}  启发: {r.heuristic_name}\n")
+                            f.write(f"代价={r.total_cost:.2f} 展开={r.nodes_expanded}\n\n")
+                            f.write(grid_map.display_path(r.path))
+                        print(f"    导出: {map_path}")
+
+            all_results.append((name, "grid", results, map_info))
 
         elif map_type == "navmesh":
             navmesh_count += 1
             r = run_navmesh_benchmark(map_info["map"], start, goal)
 
             if only_failures and r.found:
-                all_results.append((name, "navmesh", [r]))
+                all_results.append((name, "navmesh", [r], map_info))
                 continue
 
             shown_count += 1
             print(f"\n  ▶ [NavM] {name}")
             print(format_result_table([r], title=""))
-            all_results.append((name, "navmesh", [r]))
+            if r.found:
+                print(f"    路径: {r.path_summary(verbose=verbose_path)}")
+
+            all_results.append((name, "navmesh", [r], map_info))
 
     total_scenarios = len(all_results)
     print()
@@ -198,7 +231,7 @@ def cmd_batch(args):
           f"网格 {grid_count} 个, 导航网格 {navmesh_count} 个")
 
     success_count = 0
-    for _, _, results in all_results:
+    for _, _, results, _ in all_results:
         if isinstance(results, list) and results and results[0].found:
             success_count += 1
         elif hasattr(results, 'found') and results.found:
@@ -290,12 +323,45 @@ def cmd_report(args):
         export_markdown(reports, args.markdown)
         print(f"Markdown 报告已导出: {args.markdown}")
 
+    if args.save_baseline:
+        save_baseline(all_data, args.save_baseline)
+        print(f"基线已保存: {args.save_baseline}")
+
     return 0
 
 
 def cmd_stress(args):
     """随机压力测试"""
-    if args.multi:
+    if args.matrix:
+        sizes = [(int(s.split('x')[0]), int(s.split('x')[1])) for s in args.sizes]
+        densities = [float(d) for d in args.densities]
+        seeds = args.seed if args.seed else [42, 123]
+        merge_sizes = [int(m) for m in args.merge_sizes]
+        terrain_ratios = None
+        if args.terrain:
+            terrain_ratios = {}
+            for t in args.terrain:
+                name, ratio = t.split('=')
+                terrain_ratios[name] = float(ratio)
+
+        configs = build_matrix_configs(
+            sizes=sizes,
+            densities=densities,
+            seeds=seeds,
+            merge_sizes=merge_sizes,
+            terrain_ratios=terrain_ratios,
+        )
+        print(f"矩阵式压力测试: {len(configs)} 组配置...")
+        results = run_multiple_stress_tests(configs)
+        output = format_multi_stress_report(results)
+        print(output)
+
+        if args.export:
+            with open(args.export, 'w', encoding='utf-8') as f:
+                f.write(output)
+            print(f"\n报告已导出: {args.export}")
+
+    elif args.multi:
         configs = []
         seeds = args.seed if args.seed else [42, 123, 456, 789, 1024]
         for seed in seeds:
@@ -305,6 +371,7 @@ def cmd_stress(args):
                 "obstacle_density": args.obstacle_density,
                 "seed": seed,
                 "run_navmesh": not args.no_navmesh,
+                "navmesh_merge_size": args.merge_size,
             }
             if args.terrain:
                 terrain_ratios = {}
@@ -315,7 +382,13 @@ def cmd_stress(args):
             configs.append(cfg)
 
         results = run_multiple_stress_tests(configs)
-        print(format_multi_stress_report(results))
+        output = format_multi_stress_report(results)
+        print(output)
+
+        if args.export:
+            with open(args.export, 'w', encoding='utf-8') as f:
+                f.write(output)
+            print(f"\n报告已导出: {args.export}")
     else:
         seed = args.seed[0] if args.seed else 42
         terrain_ratios = None
@@ -332,10 +405,77 @@ def cmd_stress(args):
             terrain_ratios=terrain_ratios,
             seed=seed,
             run_navmesh=not args.no_navmesh,
+            navmesh_merge_size=args.merge_size,
         )
         print(format_stress_report(result))
 
     return 0
+
+
+def cmd_regress(args):
+    """回归基线对比"""
+    scenario_dir = args.dir
+    if not os.path.isdir(scenario_dir):
+        print(f"错误: 目录不存在: {scenario_dir}")
+        return 1
+
+    baseline_path = args.baseline
+    if not os.path.exists(baseline_path):
+        print(f"错误: 基线文件不存在: {baseline_path}")
+        print("  提示: 先用 report --save-baseline <file> 生成基线")
+        return 1
+
+    json_files = sorted([
+        f for f in os.listdir(scenario_dir)
+        if f.endswith('.json')
+    ])
+
+    if not json_files:
+        print(f"错误: 目录中没有 JSON 文件: {scenario_dir}")
+        return 1
+
+    filter_type = args.type
+
+    all_data = []
+    for fname in json_files:
+        filepath = os.path.join(scenario_dir, fname)
+        try:
+            map_info = load_map(filepath)
+        except Exception as e:
+            print(f"[跳过] {fname}: 加载失败 - {e}")
+            continue
+
+        map_type = map_info["map_type"]
+        if filter_type and map_type != filter_type:
+            continue
+
+        name = map_info["name"]
+        start = map_info["start"]
+        goal = map_info["goal"]
+        expectations = map_info.get("expectations", {})
+
+        if map_type == "grid":
+            results = run_grid_benchmark(map_info["map"], start, goal)
+            all_data.append((name, "grid", results, expectations))
+        elif map_type == "navmesh":
+            r = run_navmesh_benchmark(map_info["map"], start, goal)
+            all_data.append((name, "navmesh", [r], expectations))
+
+    baseline = load_baseline(baseline_path)
+    items = compare_with_baseline(all_data, baseline)
+
+    print(format_regression_report(items))
+
+    if args.save_baseline:
+        save_baseline(all_data, args.save_baseline)
+        print(f"\n新基线已保存: {args.save_baseline}")
+
+    if args.markdown:
+        export_regression_markdown(items, args.markdown)
+        print(f"回归报告已导出: {args.markdown}")
+
+    has_regression = any(i.has_regression for i in items)
+    return 1 if has_regression else 0
 
 
 def cmd_demo(args):
@@ -364,6 +504,10 @@ def main():
                          help="只显示失败的用例")
     p_batch.add_argument("--heuristics", "-H", nargs="+", default=None,
                          help="指定启发函数列表 (仅网格), 如: -H manhattan euclidean")
+    p_batch.add_argument("--verbose", "-v", action="store_true",
+                         help="显示完整路径坐标")
+    p_batch.add_argument("--export-maps", default=None, metavar="DIR",
+                         help="导出网格路径文本图到指定目录")
     p_batch.set_defaults(func=cmd_batch)
 
     p_cmp = sub.add_parser("compare", help="对比网格与导航网格性能")
@@ -379,9 +523,11 @@ def main():
                           help="导出 CSV 报告到指定文件")
     p_report.add_argument("--markdown", "--md", default=None,
                           help="导出 Markdown 报告到指定文件")
+    p_report.add_argument("--save-baseline", default=None, metavar="FILE",
+                          help="保存结果为基线 JSON 文件")
     p_report.set_defaults(func=cmd_report)
 
-    p_stress = sub.add_parser("stress", help="随机压力测试 (对比启发函数和 navmesh 性能")
+    p_stress = sub.add_parser("stress", help="随机压力测试 (对比启发函数和 navmesh 性能)")
     p_stress.add_argument("--width", "-w", type=int, default=50,
                           help="地图宽度 (默认 50)")
     p_stress.add_argument("--height", type=int, default=50,
@@ -396,7 +542,31 @@ def main():
                           help="不跑导航网格对比")
     p_stress.add_argument("--multi", "-m", action="store_true",
                           help="多组测试汇总模式")
+    p_stress.add_argument("--merge-size", type=int, default=1,
+                          help="NavMesh 合并粒度 (1=每格, 2=2x2, 4=4x4, 默认 1)")
+    p_stress.add_argument("--matrix", action="store_true",
+                          help="矩阵式测试: 多尺寸×多密度×多粒度")
+    p_stress.add_argument("--sizes", nargs="+", default=["30x30", "50x50"],
+                          help="矩阵模式地图尺寸 (如 30x30 50x50 100x100)")
+    p_stress.add_argument("--densities", nargs="+", default=["0.1", "0.2", "0.3"],
+                          help="矩阵模式障碍密度列表 (如 0.1 0.2 0.3)")
+    p_stress.add_argument("--merge-sizes", nargs="+", default=["1", "2"],
+                          help="矩阵模式 NavMesh 粒度列表 (如 1 2 4)")
+    p_stress.add_argument("--export", default=None, metavar="FILE",
+                          help="导出报告到文件")
     p_stress.set_defaults(func=cmd_stress)
+
+    p_regress = sub.add_parser("regress", help="回归基线对比")
+    p_regress.add_argument("dir", help="场景 JSON 文件目录")
+    p_regress.add_argument("--baseline", "-b", required=True,
+                           help="基线 JSON 文件路径")
+    p_regress.add_argument("--type", "-t", default=None, choices=["grid", "navmesh"],
+                           help="只跑某类地图: grid 或 navmesh")
+    p_regress.add_argument("--save-baseline", default=None, metavar="FILE",
+                           help="同时保存新基线 (更新基线)")
+    p_regress.add_argument("--markdown", "--md", default=None,
+                           help="导出回归对比 Markdown 报告")
+    p_regress.set_defaults(func=cmd_regress)
 
     p_demo = sub.add_parser("demo", help="运行完整演示")
     p_demo.set_defaults(func=cmd_demo)

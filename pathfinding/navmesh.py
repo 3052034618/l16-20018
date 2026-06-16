@@ -283,6 +283,34 @@ class NavMesh:
         }
         return smooth_path, corridor, cost, stats
 
+    def _effective_cost(self, point: Point, default_poly_idx: int, corridor: List[int]) -> float:
+        """
+        计算给定点处的有效地形代价。
+
+        如果点在单个多边形内, 返回该多边形代价。
+        如果点在共享边上 (属于多个 corridor 内多边形), 返回相邻多边形代价的平均值。
+        """
+        containing_polys = self.find_all_polygons(point)
+
+        if not containing_polys:
+            if default_poly_idx < len(corridor):
+                return self.polygons[corridor[default_poly_idx]].cost
+            return 1.0
+
+        corridor_set = set(corridor)
+        corridor_polys = [pid for pid in containing_polys if pid in corridor_set and pid in self.polygons]
+
+        if not corridor_polys:
+            if default_poly_idx < len(corridor):
+                return self.polygons[corridor[default_poly_idx]].cost
+            return self.polygons[containing_polys[0]].cost if containing_polys else 1.0
+
+        if len(corridor_polys) == 1:
+            return self.polygons[corridor_polys[0]].cost
+
+        total = sum(self.polygons[pid].cost for pid in corridor_polys)
+        return total / len(corridor_polys)
+
     def compute_path_cost(
         self,
         smooth_path: List[Point],
@@ -291,13 +319,12 @@ class NavMesh:
         """
         根据实际折线路径和多边形地形代价计算总代价。
 
-        对于路径上每个线段, 计算其在每个多边形内的长度,
-        乘以该多边形的 cost, 累加得到总代价。
+        对路径上每个线段, 找到与共享边的交点切分为子段,
+        用子段中点确定所在多边形, 计算长度 × 地形代价。
 
-        精确处理:
-          - 起点/终点落在共享边上 (属于多个多边形)
-          - 路径拐点恰好落在多边形顶点或边上
-          - 线段与共享边相交的精确位置
+        共享边代价分摊:
+          - 子段中点落在多个多边形共享边上时, 取相邻多边形代价的平均值
+          - 路径沿共享边行走、从共享边起步、拐点在多区域交点时均正确分摊
 
         Args:
             smooth_path: 平滑后的路径点列表
@@ -310,8 +337,6 @@ class NavMesh:
             return 0.0
 
         EPS = 1e-9
-
-        total_cost = 0.0
 
         if len(corridor) == 1:
             poly_id = corridor[0]
@@ -327,6 +352,7 @@ class NavMesh:
             )
             shared_edges.append(edge)
 
+        total_cost = 0.0
         current_poly_idx = 0
 
         for seg_i in range(len(smooth_path) - 1):
@@ -350,17 +376,32 @@ class NavMesh:
                     t_in_seg, pt = result
                     if -EPS <= t_in_seg <= 1.0 + EPS:
                         t_clamped = max(0.0, min(1.0, t_in_seg))
-                        crossings.append((t_clamped, edge_i, pt))
+                        crossings.append((t_clamped, edge_i))
 
             crossings.sort(key=lambda x: x[0])
+
+            deduped = []
+            for t, edge_i in crossings:
+                if deduped and abs(t - deduped[-1][0]) < EPS:
+                    if edge_i > deduped[-1][1]:
+                        deduped[-1] = (t, edge_i)
+                else:
+                    deduped.append((t, edge_i))
+            crossings = deduped
 
             prev_t = 0.0
             poly_idx = current_poly_idx
 
-            for t_cross, edge_i, _ in crossings:
+            for t_cross, edge_i in crossings:
                 if t_cross - prev_t > EPS:
                     sub_len = (t_cross - prev_t) * seg_len
-                    total_cost += sub_len * self.polygons[corridor[poly_idx]].cost
+                    mid_t = (prev_t + t_cross) / 2
+                    mid_pt = (
+                        seg_start[0] + mid_t * (seg_end[0] - seg_start[0]),
+                        seg_start[1] + mid_t * (seg_end[1] - seg_start[1]),
+                    )
+                    cost = self._effective_cost(mid_pt, poly_idx, corridor)
+                    total_cost += sub_len * cost
 
                 prev_t = t_cross
                 new_poly_idx = edge_i + 1
@@ -369,7 +410,13 @@ class NavMesh:
 
             if 1.0 - prev_t > EPS:
                 sub_len = (1.0 - prev_t) * seg_len
-                total_cost += sub_len * self.polygons[corridor[poly_idx]].cost
+                mid_t = (prev_t + 1.0) / 2
+                mid_pt = (
+                    seg_start[0] + mid_t * (seg_end[0] - seg_start[0]),
+                    seg_start[1] + mid_t * (seg_end[1] - seg_start[1]),
+                )
+                cost = self._effective_cost(mid_pt, poly_idx, corridor)
+                total_cost += sub_len * cost
 
             current_poly_idx = max(current_poly_idx, min(poly_idx, len(corridor) - 1))
 

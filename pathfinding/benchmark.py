@@ -67,6 +67,36 @@ class PathfindingResult:
             f"耗时={self.time_ms:.2f}ms"
         )
 
+    def path_summary(self, verbose: bool = False) -> str:
+        """格式化路径摘要。verbose=True 显示完整坐标, 否则只显示首尾。"""
+        if not self.found:
+            return "无路径"
+        if self.map_type == "grid":
+            if not self.path:
+                return "无路径"
+            n = len(self.path)
+            if verbose:
+                pts = [f"({p[0]},{p[1]})" for p in self.path]
+                return f"[{n}步] " + "→".join(pts)
+            if n <= 4:
+                pts = [f"({p[0]},{p[1]})" for p in self.path]
+                return f"[{n}步] " + "→".join(pts)
+            return (f"[{n}步] ({self.path[0][0]},{self.path[0][1]})"
+                    f"→...({self.path[n//2][0]},{self.path[n//2][1]})..."
+                    f"→({self.path[-1][0]},{self.path[-1][1]})")
+        else:
+            if not self.smooth_path:
+                return "无路径"
+            n = len(self.smooth_path)
+            if verbose:
+                pts = [f"({p[0]:.1f},{p[1]:.1f})" for p in self.smooth_path]
+                return f"[{n}点] " + "→".join(pts)
+            if n <= 4:
+                pts = [f"({p[0]:.1f},{p[1]:.1f})" for p in self.smooth_path]
+                return f"[{n}点] " + "→".join(pts)
+            return (f"[{n}点] ({self.smooth_path[0][0]:.1f},{self.smooth_path[0][1]:.1f})"
+                    f"→...→({self.smooth_path[-1][0]:.1f},{self.smooth_path[-1][1]:.1f})")
+
 
 def run_grid_benchmark(
     grid_map: GridMap,

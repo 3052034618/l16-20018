@@ -30,4 +30,12 @@ from .stress_test import (
     format_multi_stress_report,
     generate_random_grid,
     grid_to_navmesh,
+    build_matrix_configs,
+)
+from .regression import (
+    save_baseline,
+    load_baseline,
+    compare_with_baseline,
+    format_regression_report,
+    export_regression_markdown,
 )
