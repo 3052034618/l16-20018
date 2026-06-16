@@ -136,3 +136,33 @@ def shared_edge(poly_a: List[Point], poly_b: List[Point]):
     if len(shared) >= 2:
         return (shared[0], shared[1])
     return None
+
+
+def point_on_polygon_edge(point: Point, polygon: List[Point], eps: float = 1e-6) -> bool:
+    """判断点是否在多边形的某条边上。"""
+    n = len(polygon)
+    for i in range(n):
+        p1 = polygon[i]
+        p2 = polygon[(i + 1) % n]
+        if point_to_segment_distance(point, p1, p2) < eps:
+            return True
+    return False
+
+
+def point_to_segment_distance(p: Point, a: Point, b: Point) -> float:
+    """点 p 到线段 ab 的最短距离。"""
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    if dx == 0 and dy == 0:
+        return point_to_point_distance(p, a)
+    t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)
+    t = max(0, min(1, t))
+    proj = (a[0] + t * dx, a[1] + t * dy)
+    return point_to_point_distance(p, proj)
+
+
+def point_in_polygon_or_on_edge(point: Point, polygon: List[Point], eps: float = 1e-6) -> bool:
+    """判断点是否在多边形内部或边上。"""
+    if point_on_polygon_edge(point, polygon, eps):
+        return True
+    return point_in_polygon(point, polygon)

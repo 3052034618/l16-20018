@@ -1,0 +1,28 @@
+{
+  "type": "grid",
+  "width": 20,
+  "height": 12,
+  "allow_diagonal": true,
+  "terrain_string": [
+    "....................",
+    ".....#..............",
+    "..FFF#..............",
+    "..FFF#SSSSSSSS......",
+    "..FFF#SSSSSSSS......",
+    "..FFF#SSSSSSSS.HHHH.",
+    ".....#SSSSSSSS.HHHH.",
+    ".....#SSSSSSSS.HHHH.",
+    "......SSSSSSSS.HHHH.",
+    "....................",
+    "....................",
+    "...................."
+  ],
+  "start": [
+    0,
+    0
+  ],
+  "goal": [
+    19,
+    11
+  ]
+}

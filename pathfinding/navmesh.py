@@ -52,8 +52,12 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 from .core import AStar
 from .geometry import (
     Point,
+    line_segment_intersection,
     point_in_polygon,
+    point_in_polygon_or_on_edge,
+    point_on_polygon_edge,
     point_to_point_distance,
+    point_to_segment_distance,
     polygon_centroid,
     shared_edge,
 )
@@ -109,10 +113,25 @@ class NavMesh:
         return poly_id
 
     def find_polygon(self, point: Point) -> Optional[int]:
-        """查找包含给定点的多边形 ID。"""
+        """查找包含给定点的多边形 ID。点在边上时返回第一个包含它的多边形。"""
         for poly_id, polygon in self.polygons.items():
-            if point_in_polygon(point, polygon.vertices):
+            if point_in_polygon_or_on_edge(point, polygon.vertices):
                 return poly_id
+        return None
+
+    def find_all_polygons(self, point: Point) -> List[int]:
+        """查找所有包含给定点的多边形 ID (用于处理共享边上的点)。"""
+        result = []
+        for poly_id, polygon in self.polygons.items():
+            if point_in_polygon_or_on_edge(point, polygon.vertices):
+                result.append(poly_id)
+        return result
+
+    def point_on_shared_edge(self, point: Point) -> Optional[Tuple[int, int]]:
+        """检查点是否在两个多边形的共享边上, 返回 (poly_a_id, poly_b_id) 或 None。"""
+        polys = self.find_all_polygons(point)
+        if len(polys) >= 2:
+            return (polys[0], polys[1])
         return None
 
     def get_neighbors_with_cost(
@@ -194,29 +213,157 @@ class NavMesh:
         Returns:
             smooth_path: 漏斗算法平滑后的路径点列表
             corridor: 经过的多边形 ID 序列
-            cost: 路径总代价
+            cost: 路径总代价 (按实际折线路径与多边形代价计算)
         """
-        start_poly = self.find_polygon(start)
-        goal_poly = self.find_polygon(goal)
+        smooth_path, corridor, cost, _ = self.find_path_detail(start, goal, heuristic)
+        return smooth_path, corridor, cost
 
-        if start_poly is None or goal_poly is None:
-            return [], [], float('inf')
+    def find_path_detail(
+        self,
+        start: Point,
+        goal: Point,
+        heuristic: Optional[Callable] = None,
+    ) -> Tuple[List[Point], List[int], float, dict]:
+        """
+        在导航网格上寻路, 返回详细统计信息。
 
-        if start_poly == goal_poly:
-            return [start, goal], [start_poly], point_to_point_distance(start, goal)
+        Returns:
+            smooth_path: 漏斗算法平滑后的路径点列表
+            corridor: 经过的多边形 ID 序列
+            cost: 路径总代价 (按实际折线路径与多边形代价计算)
+            stats: 统计信息 (nodes_expanded, nodes_generated, etc.)
+        """
+        start_polys = self.find_all_polygons(start)
+        goal_polys = self.find_all_polygons(goal)
 
-        astar = self.create_astar(goal_poly, goal, heuristic)
-        poly_path, cost = astar.find_path(start_poly, goal_poly)
+        if not start_polys or not goal_polys:
+            stats = {"nodes_expanded": 0, "nodes_generated": 0, "max_open_size": 0, "found": False,
+                     "start_valid": bool(start_polys), "goal_valid": bool(goal_polys)}
+            return [], [], float('inf'), stats
 
-        if not poly_path:
-            return [], [], float('inf')
+        if start_polys[0] == goal_polys[0] or set(start_polys) & set(goal_polys):
+            same_poly = (set(start_polys) & set(goal_polys)).pop()
+            cost = point_to_point_distance(start, goal) * self.polygons[same_poly].cost
+            stats = {"nodes_expanded": 0, "nodes_generated": 0, "max_open_size": 0, "found": True,
+                     "start_valid": True, "goal_valid": True}
+            return [start, goal], [same_poly], cost, stats
 
-        from .smoothing import funnel_smooth
+        best_result = None
+        best_cost = float('inf')
 
-        corridor_polygons = [self.polygons[pid].vertices for pid in poly_path]
-        smooth_path = funnel_smooth(corridor_polygons, start, goal)
+        for sp in start_polys:
+            for gp in goal_polys:
+                astar = self.create_astar(gp, goal, heuristic)
+                poly_path, _, astar_stats = astar.find_path_detail(sp, gp)
 
-        return smooth_path, poly_path, cost
+                if not poly_path:
+                    continue
+
+                from .smoothing import funnel_smooth
+
+                corridor_polygons = [self.polygons[pid].vertices for pid in poly_path]
+                smooth_path = funnel_smooth(corridor_polygons, start, goal)
+
+                actual_cost = self.compute_path_cost(smooth_path, poly_path)
+
+                if actual_cost < best_cost:
+                    best_cost = actual_cost
+                    best_result = (smooth_path, poly_path, actual_cost, astar_stats)
+
+        if best_result is None:
+            stats = {"nodes_expanded": 0, "nodes_generated": 0, "max_open_size": 0, "found": False,
+                     "start_valid": True, "goal_valid": True}
+            return [], [], float('inf'), stats
+
+        smooth_path, corridor, cost, astar_stats = best_result
+        stats = {
+            **astar_stats,
+            "start_valid": True,
+            "goal_valid": True,
+        }
+        return smooth_path, corridor, cost, stats
+
+    def compute_path_cost(
+        self,
+        smooth_path: List[Point],
+        corridor: List[int],
+    ) -> float:
+        """
+        根据实际折线路径和多边形地形代价计算总代价。
+
+        对于路径上每个线段, 计算其在每个多边形内的长度,
+        乘以该多边形的 cost, 累加得到总代价。
+
+        Args:
+            smooth_path: 平滑后的路径点列表
+            corridor: 经过的多边形 ID 序列
+
+        Returns:
+            总代价 (几何长度 × 地形代价)
+        """
+        if len(smooth_path) < 2:
+            return 0.0
+
+        total_cost = 0.0
+
+        shared_edges = []
+        for i in range(len(corridor) - 1):
+            edge = shared_edge(
+                self.polygons[corridor[i]].vertices,
+                self.polygons[corridor[i + 1]].vertices,
+            )
+            shared_edges.append(edge)
+
+        path_t = [0.0]
+        current_poly_idx = 0
+        seg_start_idx = 0
+        seg_start_t = 0.0
+
+        cumulative_len = 0.0
+        seg_lengths = []
+        for i in range(len(smooth_path) - 1):
+            length = point_to_point_distance(smooth_path[i], smooth_path[i + 1])
+            seg_lengths.append(length)
+            cumulative_len += length
+
+        total_length = cumulative_len
+        if total_length < 1e-10:
+            start_poly = corridor[0]
+            return 0.0
+
+        dist_so_far = 0.0
+        for seg_i in range(len(smooth_path) - 1):
+            p1 = smooth_path[seg_i]
+            p2 = smooth_path[seg_i + 1]
+            seg_len = seg_lengths[seg_i]
+
+            crossings = []
+
+            for edge_i, edge in enumerate(shared_edges[current_poly_idx:], start=current_poly_idx):
+                if edge is None:
+                    continue
+                result = line_segment_intersection(p1, p2, edge[0], edge[1])
+                if result is not None:
+                    t_in_seg, pt = result
+                    if t_in_seg > 1e-10 and t_in_seg < 1 - 1e-10:
+                        crossings.append((t_in_seg, edge_i))
+
+            crossings.sort(key=lambda x: x[0])
+
+            prev_t = 0.0
+            for t_in_seg, edge_idx in crossings:
+                seg_dist = (t_in_seg - prev_t) * seg_len
+                total_cost += seg_dist * self.polygons[corridor[current_poly_idx]].cost
+                prev_t = t_in_seg
+                current_poly_idx = max(current_poly_idx, edge_idx + 1)
+                if current_poly_idx >= len(corridor):
+                    current_poly_idx = len(corridor) - 1
+
+            remaining_dist = (1.0 - prev_t) * seg_len
+            if remaining_dist > 1e-10:
+                total_cost += remaining_dist * self.polygons[corridor[current_poly_idx]].cost
+
+        return total_cost
 
     def __repr__(self):
         lines = [f"NavMesh(polygons={len(self.polygons)})"]

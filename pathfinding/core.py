@@ -81,6 +81,24 @@ class AStar:
             path: 从 start 到 goal 的节点列表
             cost: 路径总代价
         """
+        path, cost, _ = self.find_path_detail(start, goal)
+        return path, cost
+
+    def find_path_detail(
+        self, start: Any, goal: Any
+    ) -> Tuple[List[Any], float, dict]:
+        """
+        执行 A* 搜索, 返回 (路径, 总代价, 统计信息)。
+
+        Returns:
+            path: 从 start 到 goal 的节点列表
+            cost: 路径总代价
+            stats: 统计信息字典, 包含:
+              - nodes_expanded: 展开的节点数 (closed_set 大小)
+              - nodes_generated: 加入过 open_set 的节点数
+              - max_open_size: open_set 最大规模
+              - found: 是否找到路径
+        """
         open_set: List[Tuple[float, int, Any]] = []
         counter = 0
 
@@ -93,6 +111,8 @@ class AStar:
         counter += 1
 
         open_set_check = {start}
+        nodes_generated = 1
+        max_open_size = 1
 
         while open_set:
             f_val, _, current = heapq.heappop(open_set)
@@ -104,7 +124,13 @@ class AStar:
 
             if self.goal_test(current, goal):
                 path = self._reconstruct_path(came_from, current)
-                return path, g_score[current]
+                stats = {
+                    "nodes_expanded": len(closed_set) + 1,
+                    "nodes_generated": nodes_generated,
+                    "max_open_size": max_open_size,
+                    "found": True,
+                }
+                return path, g_score[current], stats
 
             closed_set.add(current)
 
@@ -123,11 +149,21 @@ class AStar:
                         heapq.heappush(open_set, (f_neighbor, counter, neighbor))
                         counter += 1
                         open_set_check.add(neighbor)
+                        nodes_generated += 1
                     else:
                         heapq.heappush(open_set, (f_neighbor, counter, neighbor))
                         counter += 1
 
-        return [], float('inf')
+                    if len(open_set_check) > max_open_size:
+                        max_open_size = len(open_set_check)
+
+        stats = {
+            "nodes_expanded": len(closed_set),
+            "nodes_generated": nodes_generated,
+            "max_open_size": max_open_size,
+            "found": False,
+        }
+        return [], float('inf'), stats
 
     @staticmethod
     def _reconstruct_path(came_from: Dict[Any, Any], current: Any) -> List[Any]:

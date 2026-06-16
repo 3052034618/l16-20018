@@ -148,6 +148,37 @@ class GridMap:
             heuristic=heuristic,
         )
 
+    def find_path_detail(
+        self,
+        start: Tuple[int, int],
+        goal: Tuple[int, int],
+        heuristic: Optional[Callable] = None,
+    ) -> Tuple[List[Tuple[int, int]], float, dict]:
+        """
+        在网格上寻路, 返回路径、代价和详细统计信息。
+
+        Returns:
+            path: 格子坐标路径
+            cost: 总代价
+            stats: 统计信息 (nodes_expanded, nodes_generated, max_open_size, found)
+        """
+        if not self.is_passable(start[0], start[1]) or not self.is_passable(goal[0], goal[1]):
+            stats = {
+                "nodes_expanded": 0,
+                "nodes_generated": 0,
+                "max_open_size": 0,
+                "found": False,
+                "start_valid": self.is_passable(start[0], start[1]),
+                "goal_valid": self.is_passable(goal[0], goal[1]),
+            }
+            return [], float('inf'), stats
+
+        astar = self.create_astar(heuristic)
+        path, cost, stats = astar.find_path_detail(start, goal)
+        stats["start_valid"] = True
+        stats["goal_valid"] = True
+        return path, cost, stats
+
     def get_obstacle_polygons(self) -> List[List[Tuple[float, float]]]:
         """
         将障碍格子转为正方形多边形列表, 用于视线检测。
